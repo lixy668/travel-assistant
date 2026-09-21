@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>管理员后台</title>
+    <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css">
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <script src="https://unpkg.com/element-plus"></script>
+</head>
+<body>
+<div id="app">
+    <el-card style="max-width:900px;margin:30px auto">
+        <template #header>
+            <span style="font-weight:600">管理员后台 · 使用情况</span>
+            <el-button v-if="token" type="danger" size="small" style="float:right" @click="logout">退出</el-button>
+        </template>
+
+        <div v-if="!token" style="max-width:380px;margin:0 auto">
+            <el-form label-width="70px">
+                <el-form-item label="账号"><el-input v-model="form.username" placeholder="管理员账号"/></el-form-item>
+                <el-form-item label="密码"><el-input v-model="form.password" type="password" show-password placeholder="管理员密码"/></el-form-item>
+                <el-button type="primary" :loading="loading" @click="handleLogin">登录后台</el-button>
+            </el-form>
+        </div>
+
+        <div v-else v-loading="loadingStats" element-loading-text="加载中...">
+            <el-row :gutter="12">
+                <el-col :span="8"><el-statistic title="注册用户" :value="stats.totalUsers || 0"/></el-col>
+                <el-col :span="8"><el-statistic title="累计登录" :value="stats.totalLogins || 0"/></el-col>
+                <el-col :span="8"><el-statistic title="行程推荐" :value="stats.totalRecommends || 0"/></el-col>
+            </el-row>
+            <el-row :gutter="12" style="margin-top:16px">
+                <el-col :span="8"><el-statistic title="AI 对话" :value="stats.totalChats || 0"/></el-col>
+                <el-col :span="8"><el-statistic title="今日登录" :value="stats.todayLogins || 0"/></el-col>
+                <el-col :span="8"><el-statistic title="今日推荐" :value="stats.todayRecommends || 0"/></el-col>
+            </el-row>
+
+            <h4 style="margin-top:24px">最近操作记录</h4>
+            <el-table :data="stats.recentLogs || []" stripe>
+                <el-table-column prop="time" label="时间" width="220"/>
+                <el-table-column prop="user" label="用户"/>
+                <el-table-column prop="action" label="操作"/>
+            </el-table>
+        </div>
+    </el-card>
+</div>
+
+<script>
+    const { createApp, ref, reactive, onMounted } = Vue;
+    const { ElMessage } = ElementPlus;
+    const app = createApp({
+        setup() {
+            const token = ref(localStorage.getItem('adminToken') || '');
+            const form = reactive({ username: '', password: '' });
+            const loading = ref(false);
+            const loadingStats = ref(false);
+            const stats = ref({});
+
+            const handleLogin = async () => {
+                if (!form.username || !form.password) { ElMessage.warning('请输入账号密码'); return; }
+                loading.value = true;
+                try {
+                    const resp = await fetch('/admin/login', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ username: form.username, password: form.password }),
+                    });
+                    const res = await resp.json();
+                    if (res.code === 200) {
+                        token.value = res.data;
+                        localStorage.setItem('adminToken', res.data);
+                        ElMessage.success('登录成功');
+                        loadStats();
+                    } else ElMessage.error(res.msg || '登录失败');
+                } catch (e) { ElMessage.error('登录失败'); }
+                finally { loading.value = false; }
+            };
+
+            const loadStats = async () => {
+                loadingStats.value = true;
+                try {
+                    const resp = await fetch('/admin/stats', { headers: { Authorization: 'Bearer ' + token.value } });
+                    if (resp.status === 401 || resp.status === 403) { ElMessage.error('登录过期或无权访问'); logout(); return; }
+                    const res = await resp.json();
+                    if (res.code === 200) stats.value = res.data; else ElMessage.error(res.msg || '获取失败');
+                } catch (e) { ElMessage.error('获取统计数据失败'); }
+                finally { loadingStats.value = false; }
+            };
+
+            const logout = () => { token.value = ''; localStorage.removeItem('adminToken'); };
+            onMounted(() => { if (token.value) loadStats(); });
+
+            return { token, form, loading, loadingStats, stats, handleLogin, logout };
+        }
+    });
+    app.use(ElementPlus);
+    app.mount('#app');
+</script>
+</body>
+</html>

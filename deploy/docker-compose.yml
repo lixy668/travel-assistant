@@ -1,0 +1,94 @@
+name: travel-prod
+
+services:
+  # ================= MySQL =================
+  mysql:
+    image: mysql:8.0
+    container_name: travel-mysql
+    restart: unless-stopped
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-authentication-plugin=mysql_native_password
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_PASSWORD:-2003}
+      MYSQL_DATABASE: travel
+      TZ: Asia/Shanghai
+    volumes:
+      - mysql-data:/var/lib/mysql
+    ports:
+      # 宿主机用 3307 连容器（避免和本机 3306 的 MySQL 冲突）
+      - "3307:3306"
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  # ================= Redis（缓存 + 限流计数 + 幂等键）=================
+  redis:
+    image: redis:7-alpine
+    container_name: travel-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+
+  # ================= Spring Boot 后端 =================
+  backend:
+    build:
+      context: ../travel-assistant-main/travel-assistant-main
+      dockerfile: Dockerfile
+    container_name: travel-backend
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      TZ: Asia/Shanghai
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/travel?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD:-2003}
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
+      AMAP_KEY: ${AMAP_KEY}
+      JWT_SECRET: ${JWT_SECRET}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-*}
+    ports:
+      # 暴露给宿主机：Prometheus 抓指标、本地调试接口用
+      - "3200:3200"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3200/actuator/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  # ================= 网关：静态页面 + HTTPS + 反向代理 =================
+  gateway:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.frontend
+    container_name: travel-gateway
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      TZ: Asia/Shanghai
+    ports:
+      - "80:80"
+      # 想开 HTTPS 时，取消下面三行注释，并把证书放到 deploy/certs/ 目录
+      # - "443:443"
+    # volumes:
+    #   - ./certs:/etc/nginx/certs:ro
+
+volumes:
+  mysql-data:
+  redis-data:

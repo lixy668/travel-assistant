@@ -1,0 +1,10 @@
+# 这个文件管的是「构建前端镜像时的上下文」，把没用的全排掉，构建会快很多
+**/node_modules
+**/dist
+**/target
+**/.idea
+**/.git
+**/*.log
+monitor/**
+deploy/certs/**
+deploy/.env

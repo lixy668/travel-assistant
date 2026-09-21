@@ -1,0 +1,10 @@
+package com.lixinyang.travelassistant.repository;
+
+import com.lixinyang.travelassistant.entity.AdminLog;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import java.util.List;
+
+public interface AdminLogRepository extends JpaRepository<AdminLog, Long> {
+    List<AdminLog> findTop200ByOrderByCreateTimeDesc();
+}
