@@ -1,0 +1,20 @@
+# ===== 依赖与构建产物（体积大，服务器上会重新装/编译，不进仓库）=====
+**/node_modules/
+**/dist/
+**/target/
+**/.vite/
+
+# ===== 密钥与本地配置：绝对不能进仓库 =====
+**/.env
+deploy/certs/
+
+# ===== 日志、数据库备份 =====
+*.log
+deploy/backups/
+
+# ===== 编辑器 / 系统文件 =====
+.idea/
+*.iml
+.vscode/
+Thumbs.db
+.DS_Store
